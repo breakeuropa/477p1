@@ -1,0 +1,27 @@
+Course Code; Title; Subject; Instructor; Prerequisites; Seats; Capacity; Description
+CS101;Introduction to Computer Science;Computer Science;Professor Calculus;;15;20;An introduction to the fundamental concepts of computer science and programming.
+CS201;Data Structures;Computer Science;Professor Calculus;CS101;10;15;Exploration of basic data structures and their application in problem-solving.
+CS202;Algorithms;Computer Science;Dr. Castafiore;CS201;12;15;Analysis and design of algorithms, including sorting, searching, and graph algorithms.
+CS301;Database Management Systems;Computer Science;Mr. Cuthbert;CS202;5;10;Study of database design, SQL, and database management systems.
+CS302;Operating Systems;Computer Science;Mr. Cuthbert;CS202;8;10;Covers the design and implementation of modern operating systems.
+MATH150;Calculus I;Mathematics;Ms. La Goulue;;25;25;Introduction to differential and integral calculus.
+MATH151;Calculus II;Mathematics;Ms. La Goulue;MATH150;18;20;A continuation of Calculus I, covering advanced integration techniques and series.
+MATH250;Discrete Mathematics;Mathematics;Professor Calculus;MATH150;10;15;An introduction to logic, set theory, graph theory, and other discrete topics.
+PHYS210;General Physics I;Physics;Professor Calculus;MATH150;12;12;Fundamental principles of mechanics, waves, and thermodynamics.
+PHYS211;General Physics II;Physics;Mr. Nestor;PHYS210,MATH151;9;10;Continuation of General Physics I, focusing on electricity and magnetism.
+HIST101;World History;History;Mr. Jolyon Wagg;;30;30;Survey of major global civilizations and historical events.
+HIST202;Ancient Civilizations;History;Mr. Jolyon Wagg;HIST101;15;20;In-depth study of ancient cultures including Rome, Greece, and Egypt.
+GEOL100;Intro to Geology;Geology;Dr. J. C. F. Feller;;18;20;An introduction to the study of Earth's materials, structure, and processes.
+ART100;Introduction to Art History;Art;Mr. Thompson;;18;20;A survey of art movements from prehistoric times to the Renaissance.
+ART205;Modern Art;Art;Mr. Thompson;ART100;10;10;A study of art from the late 19th century to the present day.
+CHEM110;General Chemistry I;Chemistry;Professor Tarragon;;20;25;Introduction to the basic principles of chemistry.
+CHEM111;General Chemistry II;Chemistry;Professor Tarragon;CHEM110;15;20;A continuation of General Chemistry I.
+BIO100;Intro to Biology;Biology;Ms. Bianca Castafiore;;22;25;An introduction to the fundamental concepts of biology.
+BIO201;Cellular Biology;Biology;Ms. Bianca Castafiore;BIO100;10;15;An in-depth study of cellular structure, function, and processes.
+MUSI100;Music Appreciation;Music;Ms. Bianca Castafiore;;25;25;An exploration of various musical styles, periods, and composers.
+CS400;Computational Theory;Computer Science;Professor Calculus;CS202,MATH250;10;10;A rigorous introduction to the theoretical foundations of computation.
+CHEM300;Organic Chemistry;Chemistry;Professor Tarragon;CHEM111,MATH151;8;10;The study of the structure, properties, and reactions of organic compounds.
+POLS300;Political Philosophy;Political Science;Mr. Jolyon Wagg;POLS100,HIST101;15;20;An analysis of classic and contemporary political theories.
+ENGL101;Intro to Literature;English;Dr. S. I. L. Vester;;28;30;An introduction to literary analysis and major genres.
+ENGL201;Creative Writing;English;Dr. S. I. L. Vester;ENGL101;0;15;Develops skills in writing fiction, poetry, and creative nonfiction.
+

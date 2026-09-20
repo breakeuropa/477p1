@@ -1,0 +1,35 @@
+CS447 FALL 2026 P1 : Online Course Registration System
+======================================================
+Author: [Your Name Here]
+Date: [Current Date]
+
+Overview:
+  <Briefly describe the purpose of the project, e.g., "A concurrent socket-based server for course registration.">
+
+Directory Structure of the Tarball:
+  <Below is a baseline sample. Modify it to match your exact submission if you added new modules or helper files to organize your code. Note that p1_helper.h, courses.db, and server.conf MUST NOT be included in your final tarball!>
+
+  p1/
+    |- README: This file, containing project documentation and instructions.
+    |- server.cpp: The implemented server application code.
+    |- p1_helper.cpp: The implemented database helper functions.
+    |- Makefile: Script to compile the server application.
+    |- <List any additional .cpp or .h files you created to manage state or logic>
+
+Important Note on Custom Files:
+  If you choose to create your own custom header files (e.g., to manage student grades or server state), DO NOT duplicate any logic, structs (like the `Course` struct), or function definitions from `p1_helper.h`. Duplicating these will cause C++ linker errors. Instead, simply `#include "p1_helper.h"` inside your custom files if you need to access those definitions.
+
+Compilation:
+  <Provide clear and complete instructions on how to compile your code using your Makefile. If you added new source files, ensure your Makefile compiles them!>
+  
+  <You MUST also include manual compilation instructions in case your Makefile fails to work as expected. e.g., "g++ -std=c++20 -Wall -pthread server.cpp p1_helper.cpp -o server">
+
+How to Run:
+  <Explain the order in which your solution should be run. Include the runtime signature and assumptions. Example:>
+  1. Start the server: ./server server.conf
+  2. Connect a client using netcat: nc <server-ip> <server-port>
+
+Notes and Design Choices:
+  <Explain any key design choices, such as how you managed std::jthread concurrency, tracked student enrollments, or separated your program logic into multiple files.>
+  
+  <IMPORTANT: Explicitly mention any unimplemented features or known bugs here. This is crucial for earning partial credit!>
