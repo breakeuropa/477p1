@@ -62,6 +62,9 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
     	// 1. You must continuously recv() data from the client.  
     	char buf[1024];
 	bool identified = false;
+	bool catalog = false;
+	bool enrollment = false;
+	bool mycourses = false;
 	std::string username;
 
 	while (true)
@@ -95,7 +98,7 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
 					}
 					if (username.empty())
 					{
-						std::string reply = "400 BAD REQUEST\n";
+						std::string reply = "400 BAD REQUEST: no username submitted\n";
 						send(client_fd, reply.c_str(), reply.size(), 0);
 					}
 					else 
@@ -107,13 +110,52 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
 				}
 				else
 				{
-					std::string reply = "400 BAD REQUEST\n";
+					std::string reply = "400 BAD REQUEST: must enter 'IAM' mode\n";
 					send(client_fd, reply.c_str(), reply.size(), 0);
 				}
 			}
 			else // 2. Parse the client's commands (e.g., IAM, CATALOG, ENROLLMENT, BYE).
 			{
-    				std::cout << "IAM from " << username << " yippee!!" << std::endl;
+				if (command == "BYE")
+				{
+					std::string reply = "200: SUCCESS\nBye bye\n";
+					send(client_fd, reply.c_str(), reply.size(), 0);
+					break;
+				}
+    				if (command == "HELP")
+				{
+					if (!catalog && !enrollment && !mycourses)
+					{
+						std::string reply = "200 SUCCESS\n Avaiable commands are:\n"
+							"CATALOG: access course catalog\n"
+							"ENROLLMENT: enroll or drop course\n"
+							"MYCOURSES: manage schedules\n"
+							"BYE: close and exit\n";
+						send(client_fd, reply.c_str(), reply.size(), 0);
+					}
+					if (catalog)
+					{
+						std::string reply = "200 SUCCESS\n CATALOG commands are:\n"
+							"LIST [filter]: shows all available courses\n"
+							"SEARCH <filter> <search-term>: finds courses within the filter and search-term\n"
+							"SHOW <course-code> [availability]: displays details for course\n"
+							"\naruguments within <> are required, [] are optional";
+						send(client_fd, reply.c_str(), reply.size(), 0);
+					}
+				}
+				if (command == "CATALOG")
+				{	
+					catalog = true;
+					enrollment = false;
+					mycourses = false;
+
+					std::cout << "catalog bruh\n";
+				}
+				else
+				{
+					std::string reply = "400 BAD REQUEST: unknown command\n";
+					send(client_fd, reply.c_str(), reply.size(), 0);
+				}
 			}
 		}
 		else
