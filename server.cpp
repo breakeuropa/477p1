@@ -104,7 +104,7 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
 					else 
 					{
 						identified = true;
-						std::string reply = "200 SUCCESS\n";
+						std::string reply = "200 SUCCESS: Welcome " + username + "@" + s + "\n";
 						send(client_fd, reply.c_str(), reply.size(), 0);
 					}
 				}
@@ -118,7 +118,7 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
 			{
 				if (command == "BYE")
 				{
-					std::string reply = "200: SUCCESS\nBye bye\n";
+					std::string reply = "200 SUCCESS\nBye bye\n";
 					send(client_fd, reply.c_str(), reply.size(), 0);
 					break;
 				}
@@ -133,13 +133,28 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
 							"BYE: close and exit\n";
 						send(client_fd, reply.c_str(), reply.size(), 0);
 					}
-					if (catalog)
+					else if (catalog)
 					{
 						std::string reply = "200 SUCCESS\n CATALOG commands are:\n"
 							"LIST [filter]: shows all available courses\n"
 							"SEARCH <filter> <search-term>: finds courses within the filter and search-term\n"
 							"SHOW <course-code> [availability]: displays details for course\n"
-							"\naruguments within <> are required, [] are optional";
+							"\n(aruguments within <> are required, [] are optional)\n";
+						send(client_fd, reply.c_str(), reply.size(), 0);
+					}
+					else if (enrollment)
+					{
+						std::string reply = "200 SUCCESS\n ENROLLMENT commands are:\n"
+							"ENROLL <course_code>: enrolls you in a course\n"
+							"DROP <course_code>: drops a specified course\n"
+							"\n(arguemnts in <> are required)\n";
+						send(client_fd, reply.c_str(), reply.size(), 0);
+					}
+					else if (mycourses)
+					{
+						std::string reply = "200 SUCCESS\n MYCOURSES commands are:\n"
+							"LIST: displays current enrollment\n"
+							"VIEWGRADES: displays grades for completed courses\n";
 						send(client_fd, reply.c_str(), reply.size(), 0);
 					}
 				}
@@ -149,13 +164,34 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
 					enrollment = false;
 					mycourses = false;
 
-					std::cout << "catalog bruh\n";
+					std::string reply = "200 SUCCESS: now entering CATALOG mode\n";
+					send(client_fd, reply.c_str(), reply.size(), 0);
 				}
+				if (command == "ENROLLMENT")
+				{
+					catalog = false;
+					enrollment = true;
+					mycourses = false;
+
+					std::string reply = "200 SUCCESS: now entering ENROLLMENT mode\n";
+					send(client_fd, reply.c_str(), reply.size(), 0);
+				}
+				if (command == "MYCOURSES")
+				{
+					catalog = false;
+					enrollment = false;
+					mycourses = true;
+
+					std::string reply = "200 SUCCESS: now entering MYCOURSES mode\n";
+					send(client_fd, reply.c_str(), reply.size(), 0);
+				}
+				/*
 				else
 				{
 					std::string reply = "400 BAD REQUEST: unknown command\n";
 					send(client_fd, reply.c_str(), reply.size(), 0);
 				}
+				*/
 			}
 		}
 		else
