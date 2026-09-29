@@ -47,6 +47,108 @@ void *get_in_addr(struct sockaddr *sa) {
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+enum class Mode {kNone, kCatalog, kEnrollment, kMyCourses};
+
+void send_reply(int client_fd, const std::string& reply)
+{
+	send(client_fd, reply.c_str(), reply.size(), 0);
+}
+
+bool handle_iam(int client_fd, const std::string& message, size_t space_pos, const std::string& client_ip, std::string& username)
+{
+	
+		if (space_pos != std::string::npos)
+		{
+			size_t start = message.find_first_not_of(" ", space_pos);
+			size_t end = message.find_first_of("\r\n", start);
+			if (start != std::string::npos)
+			{	
+				username = message.substr(start, end - start);
+			}
+		}
+		if (username.empty())
+		{
+			send_reply(client_fd, "400 BAD REQUEST: no username submitted\n");
+			return false;
+		}
+		send_reply(client_fd, "200 SUCCESS: Welcome " + username + "@" + client_ip + "\n");
+		return true;
+
+}
+
+void send_help(int client_fd, Mode mode)
+{
+	switch (mode)
+	{
+		case Mode::kNone:
+			send_reply(client_fd, 
+					"200 SUCCESS\n Avaiable commands are:\n"
+					"CATALOG: access course catalog\n"
+					"ENROLLMENT: enroll or drop course\n"
+					"MYCOURSES: manage schedules\n"
+					"BYE: close and exit\n");
+			break;
+		case Mode::kCatalog:
+			send_reply(client_fd,
+					"200 SUCCESS\n CATALOG commands are:\n"
+					"LIST [filter]: shows all available courses\n"
+					"SEARCH <filter> <search-term>: finds courses within the filter and search-term\n"
+					"SHOW <course-code> [availability]: displays details for course\n"
+					"\n(aruguments within <> are required, [] are optional)\n");
+			break;
+		case Mode::kEnrollment:
+			send_reply(client_fd,
+					"200 SUCCESS\n ENROLLMENT commands are:\n"
+					"ENROLL <course_code>: enrolls you in a course\n"
+					"DROP <course_code>: drops a specified course\n"
+					"\n(arguemnts in <> are required)\n");
+			break;
+		case Mode::kMyCourses:
+			send_reply(client_fd, 
+					"200 SUCCESS\n MYCOURSES commands are:\n"
+					"LIST: displays current enrollment\n"
+					"VIEWGRADES: displays grades for completed courses\n");
+			break;
+	}
+}
+
+bool try_switch_mode(int client_fd, const std::string& command, Mode& mode)
+{
+	if (command == "CATALOG")
+	{
+		mode = Mode::kCatalog;
+		send_reply(client_fd, "210 SUCCESS: now entering CATALOG mode\n");
+		return true;
+	}				
+	if (command == "ENROLLMENT")
+	{
+		mode = Mode::kEnrollment;
+		send_reply(client_fd, "220 SUCCESS: now entering ENROLLMENT mode\n");
+		return true;
+	}
+	if (command == "MYCOURSES")
+	{
+		mode = Mode::kMyCourses;
+		send_reply(client_fd, "230 SUCCESS: now entering MYCOURSES mode\n");
+		return true;
+	}
+	return false;
+}
+
+void handle_catalog_command(int client_fd, const std::string& command, const std::string& args)
+{
+
+}
+
+void handle_enrollment_command(int client_fd, const std::string& command, const std::string& args, const std::string& username)
+{
+
+}
+
+void handle_mycourses_command(int client_fd, const std::string& command, const std::string& args, const std::string& username)
+{
+
+}
 // Function to handle a single client connection in its own thread
 void handle_client(int client_fd, struct sockaddr_storage their_addr) 
 {
@@ -62,9 +164,7 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
     	// 1. You must continuously recv() data from the client.  
     	char buf[1024];
 	bool identified = false;
-	bool catalog = false;
-	bool enrollment = false;
-	bool mycourses = false;
+	Mode mode = Mode::kNone;
 	std::string username;
 
 	while (true)
@@ -87,26 +187,7 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
 			{
 				if (command == "IAM")
 				{
-					if (space_pos != std::string::npos)
-					{
-						size_t start = message.find_first_not_of(" ", space_pos);
-						size_t end = message.find_first_of("\r\n", start);
-						if (start != std::string::npos)
-						{
-							username = message.substr(start, end - start);
-						}
-					}
-					if (username.empty())
-					{
-						std::string reply = "400 BAD REQUEST: no username submitted\n";
-						send(client_fd, reply.c_str(), reply.size(), 0);
-					}
-					else 
-					{
-						identified = true;
-						std::string reply = "200 SUCCESS: Welcome " + username + "@" + s + "\n";
-						send(client_fd, reply.c_str(), reply.size(), 0);
-					}
+					identified = handle_iam(client_fd, message, space_pos, s, username);
 				}
 				else
 				{
@@ -118,80 +199,20 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
 			{
 				if (command == "BYE")
 				{
-					std::string reply = "200 SUCCESS\nBye bye\n";
-					send(client_fd, reply.c_str(), reply.size(), 0);
+					send_reply(client_fd, "200 SUCCESS\nSee ya!\n");
 					break;
 				}
-    				if (command == "HELP")
+				else if (command == "HELP")
 				{
-					if (!catalog && !enrollment && !mycourses)
-					{
-						std::string reply = "200 SUCCESS\n Avaiable commands are:\n"
-							"CATALOG: access course catalog\n"
-							"ENROLLMENT: enroll or drop course\n"
-							"MYCOURSES: manage schedules\n"
-							"BYE: close and exit\n";
-						send(client_fd, reply.c_str(), reply.size(), 0);
-					}
-					else if (catalog)
-					{
-						std::string reply = "200 SUCCESS\n CATALOG commands are:\n"
-							"LIST [filter]: shows all available courses\n"
-							"SEARCH <filter> <search-term>: finds courses within the filter and search-term\n"
-							"SHOW <course-code> [availability]: displays details for course\n"
-							"\n(aruguments within <> are required, [] are optional)\n";
-						send(client_fd, reply.c_str(), reply.size(), 0);
-					}
-					else if (enrollment)
-					{
-						std::string reply = "200 SUCCESS\n ENROLLMENT commands are:\n"
-							"ENROLL <course_code>: enrolls you in a course\n"
-							"DROP <course_code>: drops a specified course\n"
-							"\n(arguemnts in <> are required)\n";
-						send(client_fd, reply.c_str(), reply.size(), 0);
-					}
-					else if (mycourses)
-					{
-						std::string reply = "200 SUCCESS\n MYCOURSES commands are:\n"
-							"LIST: displays current enrollment\n"
-							"VIEWGRADES: displays grades for completed courses\n";
-						send(client_fd, reply.c_str(), reply.size(), 0);
-					}
+					send_help(client_fd, mode);
 				}
-				if (command == "CATALOG")
-				{	
-					catalog = true;
-					enrollment = false;
-					mycourses = false;
-
-					std::string reply = "200 SUCCESS: now entering CATALOG mode\n";
-					send(client_fd, reply.c_str(), reply.size(), 0);
-				}
-				if (command == "ENROLLMENT")
+				else if (try_switch_mode(client_fd, command, mode))
 				{
-					catalog = false;
-					enrollment = true;
-					mycourses = false;
-
-					std::string reply = "200 SUCCESS: now entering ENROLLMENT mode\n";
-					send(client_fd, reply.c_str(), reply.size(), 0);
 				}
-				if (command == "MYCOURSES")
-				{
-					catalog = false;
-					enrollment = false;
-					mycourses = true;
-
-					std::string reply = "200 SUCCESS: now entering MYCOURSES mode\n";
-					send(client_fd, reply.c_str(), reply.size(), 0);
+				else// 2. Parse the client's commands (e.g., IAM, CATALOG, ENROLLMENT, BYE).
+ 				{
+					std::cout << "welocme to unfinsihesd code\n";
 				}
-				/*
-				else
-				{
-					std::string reply = "400 BAD REQUEST: unknown command\n";
-					send(client_fd, reply.c_str(), reply.size(), 0);
-				}
-				*/
 			}
 		}
 		else
