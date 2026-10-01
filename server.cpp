@@ -22,6 +22,9 @@
 #include <vector>
 #include <system_error>
 #include <fstream> 
+#include <sstream>
+#include <mutex>
+#include <unordered_map>
 
 // C headers for socket API
 #include <stdio.h>
@@ -39,6 +42,13 @@
 
 #define BACKLOG 10
 
+struct ServerState
+{
+	std::vector<Course> courses;
+	std::unordered_map<std::string, std::vector<GradeRecord>> student_records;
+	std::mutex mutex;
+};
+
 // Helper function to get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa) {
     if (sa->sa_family == AF_INET) {
@@ -54,25 +64,17 @@ void send_reply(int client_fd, const std::string& reply)
 	send(client_fd, reply.c_str(), reply.size(), 0);
 }
 
-bool handle_iam(int client_fd, const std::string& message, size_t space_pos, const std::string& client_ip, std::string& username)
+bool handle_iam(int client_fd, const std::string& args, const std::string& client_ip, std::string& username)
 {
+	username = args;
 	
-		if (space_pos != std::string::npos)
-		{
-			size_t start = message.find_first_not_of(" ", space_pos);
-			size_t end = message.find_first_of("\r\n", start);
-			if (start != std::string::npos)
-			{	
-				username = message.substr(start, end - start);
-			}
-		}
-		if (username.empty())
-		{
-			send_reply(client_fd, "400 BAD REQUEST: no username submitted\n");
-			return false;
-		}
-		send_reply(client_fd, "200 SUCCESS: Welcome " + username + "@" + client_ip + "\n");
-		return true;
+	if (username.empty())
+	{
+		send_reply(client_fd, "400 BAD REQUEST: no username submitted\n");
+		return false;
+	}
+	send_reply(client_fd, "200 SUCCESS: Welcome " + username + "@" + client_ip + "\n");
+	return true;
 
 }
 
@@ -135,22 +137,37 @@ bool try_switch_mode(int client_fd, const std::string& command, Mode& mode)
 	return false;
 }
 
-void handle_catalog_command(int client_fd, const std::string& command, const std::string& args)
+void handle_catalog_command(int client_fd, const std::string& command, const std::string& args, ServerState& state)
+{
+	std::istringstream iss(args);
+
+	if (command == "LIST")
+	{
+	}
+	else if (command == "SEARCH")
+	{
+	}
+	else if (command == "SHOW")
+	{
+	}
+	else
+	{
+		send_reply(client_fd, "400 BAD REQUEST: command not avaialble in CATALOG mode\n");
+	}
+
+}
+
+void handle_enrollment_command(int client_fd, const std::string& command, const std::string& args, const std::string& username, ServerState& state)
 {
 
 }
 
-void handle_enrollment_command(int client_fd, const std::string& command, const std::string& args, const std::string& username)
-{
-
-}
-
-void handle_mycourses_command(int client_fd, const std::string& command, const std::string& args, const std::string& username)
+void handle_mycourses_command(int client_fd, const std::string& command, const std::string& args, const std::string& username, ServerState& state)
 {
 
 }
 // Function to handle a single client connection in its own thread
-void handle_client(int client_fd, struct sockaddr_storage their_addr) 
+void handle_client(int client_fd, struct sockaddr_storage their_addr, ServerState& state) 
 {
 	// A temporary buffer for the client's IP address string
 	char s[INET6_ADDRSTRLEN];
@@ -180,14 +197,24 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
 		{
 			buf[numbytes] = '\0'; 
 			std::string message(buf);
-			size_t space_pos = message.find_first_of(" \r\n");
-			std::string command = message.substr(0, space_pos);
+			
+			std::istringstream iss(message);
+			std::string command, args;
+			iss >> command;
+			std::getline(iss, args);
+
+			size_t start = args.find_first_not_of(' ');
+			args = (start == std::string::npos) ? "" : args.substr(start);
+			while (!args.empty() && (args.back() == '\r' || args.back() == '\n'))
+			{
+				args.pop_back();
+			}
 
 			if (!identified) // 3. Ensure the proper mode sequencing (the client must send IAM first).
 			{
 				if (command == "IAM")
 				{
-					identified = handle_iam(client_fd, message, space_pos, s, username);
+					identified = handle_iam(client_fd, args, s, username);
 				}
 				else
 				{
@@ -211,7 +238,21 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr)
 				}
 				else// 2. Parse the client's commands (e.g., IAM, CATALOG, ENROLLMENT, BYE).
  				{
-					std::cout << "welocme to unfinsihesd code\n";
+					switch (mode)
+					{
+						case Mode::kNone:
+							send_reply(client_fd, "400 BAD REQUEST: must enter mode first\n");
+							break;
+						case Mode::kCatalog:
+							  handle_catalog_command(client_fd, command, args, state);
+							  break;
+						case Mode::kEnrollment:
+							  handle_enrollment_command(client_fd, command, args, username, state);
+							  break;
+						case Mode::kMyCourses:
+							  handle_mycourses_command(client_fd, command, args, username, state);
+							  break;
+					}
 				}
 			}
 		}
@@ -233,6 +274,7 @@ int main(int argc, char *argv[]) {
     socklen_t sin_size;
     int yes = 1;
     int rv;
+    ServerState state;
 
     // Check if the server.conf file argument was provided
     if (argc < 2) {
@@ -283,9 +325,10 @@ int main(int argc, char *argv[]) {
 
     conf_file.close();
 
-    // TODO: Call your helper function to load the courses database here.
-    // e.g., load_courses_from_db(db_file_to_use);
-    // Do this BEFORE setting up the sockets and entering the main loop.
+    // 	Call your helper function to load the courses database here.
+    // 	e.g., load_courses_from_db(db_file_to_use);
+    // 	Do this BEFORE setting up the sockets and entering the main loop.
+    state.courses = load_courses_from_db(db_file_to_use);
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;       // IPv4
@@ -342,7 +385,8 @@ int main(int argc, char *argv[]) {
 
         // Create a new thread to handle the accepted connection
         // std::jthread automatically joins upon destruction
-        std::jthread(handle_client, client_fd, their_addr);
+	std::vector<std::jthread> threads;
+	threads.push_back(std::jthread(handle_client, client_fd, their_addr, std::ref(state)));
     }
 
     close(listen_fd);
