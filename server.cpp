@@ -25,6 +25,8 @@
 #include <sstream>
 #include <mutex>
 #include <unordered_map>
+#include <algorithm>
+#include <cctype>
 
 // C headers for socket API
 #include <stdio.h>
@@ -93,7 +95,7 @@ void send_help(int client_fd, Mode mode)
 		case Mode::kCatalog:
 			send_reply(client_fd,
 					"200 SUCCESS\n CATALOG commands are:\n"
-					"LIST [filter]: shows all available courses\n"
+					"LIST [subject, instructor, course-code]: shows all available courses\n"
 					"SEARCH <filter> <search-term>: finds courses within the filter and search-term\n"
 					"SHOW <course-code> [availability]: displays details for course\n"
 					"\n(aruguments within <> are required, [] are optional)\n");
@@ -114,25 +116,49 @@ void send_help(int client_fd, Mode mode)
 	}
 }
 
-bool try_switch_mode(int client_fd, const std::string& command, Mode& mode)
+bool try_switch_mode(int client_fd, const std::string& command, const std::string& args, Mode& mode)
 {
 	if (command == "CATALOG")
 	{
-		mode = Mode::kCatalog;
-		send_reply(client_fd, "210 SUCCESS: now entering CATALOG mode\n");
-		return true;
+		if (!args.empty())
+		{
+			send_reply(client_fd, "400 BAD REQUEST: CATALOG does not take multiple arguments\n");
+			return true;
+		}
+		else
+		{
+			mode = Mode::kCatalog;
+			send_reply(client_fd, "210 SUCCESS: now entering CATALOG mode\n");
+			return true;
+		}
 	}				
 	if (command == "ENROLLMENT")
 	{
-		mode = Mode::kEnrollment;
-		send_reply(client_fd, "220 SUCCESS: now entering ENROLLMENT mode\n");
-		return true;
+		if (!args.empty())
+		{
+			send_reply(client_fd, "400 BAD REQUEST: ENROLLMENT does not take multiple arguments\n");
+			return true;
+		}
+		else
+		{
+			mode = Mode::kEnrollment;
+			send_reply(client_fd, "220 SUCCESS: now entering ENROLLMENT mode\n");
+			return true;
+		}
 	}
 	if (command == "MYCOURSES")
 	{
-		mode = Mode::kMyCourses;
-		send_reply(client_fd, "230 SUCCESS: now entering MYCOURSES mode\n");
-		return true;
+		if (!args.empty())
+		{
+			send_reply(client_fd, "400 BAD REQUEST: MYCOURSES does not take multiple arguments\n");
+			return true;
+		}
+		else
+		{
+			mode = Mode::kMyCourses;
+			send_reply(client_fd, "230 SUCCESS: now entering MYCOURSES mode\n");
+			return true;
+		}
 	}
 	return false;
 }
@@ -141,14 +167,68 @@ void handle_catalog_command(int client_fd, const std::string& command, const std
 {
 	std::istringstream iss(args);
 
-	if (command == "LIST")
+	if (command == "LIST") 
 	{
+		std::string reply = "250 SUCCESS:\n";
+		for (const Course& c : state.courses)
+		{
+			reply += c.course_code + ": " + c.title + " - " + c.subject + " - " + c.instructor + "\n";  
+		}
+		send_reply(client_fd, reply);
 	}
-	else if (command == "SEARCH")
+	else if (command == "SEARCH") //vectorCourse search_courses
 	{
+		std::string filter, search_term;
+		iss >> filter >> search_term;
+		if (filter.empty() || search_term.empty())
+		{
+			send_reply(client_fd, "400 BAD REQUEST: <filter> and <search-term> required\n");
+			return;
+		}
+		std::lock_guard<std::mutex> lock(state.mutex);
+		std::vector<Course> results = search_courses(state.courses, filter, search_term); 
+
+		if (!results.empty())
+		{
+			std::string reply = "250 SUCCESS:\n";
+			for (const Course& c : results)
+			{
+				reply += c.course_code + ": " + c.title + " - " + c.subject + " - " + c.instructor + "\n";  
+			}
+			send_reply(client_fd, reply);
+		}
+		else
+		{
+			send_reply(client_fd, "304 NO CONTENT: nothing matching filter or search term\n");
+		}
 	}
-	else if (command == "SHOW")
+	else if (command == "SHOW") //Course get_course_by_code
 	{
+		std::string course_code, availability;
+		iss >> course_code >> availability;
+		std::string availability_upper = availability;
+		std::transform(availability_upper.begin(), availability_upper.end(), availability_upper.begin(), [](unsigned char c) { return std::toupper(c); }); 
+
+		std::lock_guard<std::mutex> lock(state.mutex);
+		Course c = get_course_by_code(state.courses, course_code);
+
+		if (c.course_code.empty())
+		{
+			send_reply(client_fd, "404 NOT FOUND: there are no matching courses\n");
+		}
+		else if (availability_upper == "AVAILABILITY")
+		{
+			std::string status = (c.seats_available > 0) ? "Open" : "Full";
+			send_reply(client_fd, "250: SUCCESS\n\nAvailability: " + c.course_code + ": " + c.title + " - " + status + ", Seats: " + std::to_string(c.seats_available) + "\n\n");
+		}
+		else if (!availability.empty())
+		{
+			send_reply(client_fd, "400 BAD REQUEST: '" + availability + "' is not a valid argument. Try 'availability'\n");
+		}
+		else
+		{
+			send_reply(client_fd, "250: SUCCESS\n\n" + c.course_code + ": " + c.title + "\n" + "Instructor: " + c.instructor + "\n" + "Description: " + c.description + "\n\n");
+		}
 	}
 	else
 	{
@@ -159,12 +239,34 @@ void handle_catalog_command(int client_fd, const std::string& command, const std
 
 void handle_enrollment_command(int client_fd, const std::string& command, const std::string& args, const std::string& username, ServerState& state)
 {
+	std::istringstream iss(args);
 
+	if (command == "ENROLL") //bool enroll_in_course
+	{
+	}
+	else if (command == "DROP") //bool drop_course
+	{
+	}
+	else
+	{
+		send_reply(client_fd, "400 BAD REQUEST: command not available in ENROLLMENT mode\n");
+	}
 }
 
 void handle_mycourses_command(int client_fd, const std::string& command, const std::string& args, const std::string& username, ServerState& state)
 {
+	std::istringstream iss(args);
 
+	if (command == "LIST")
+	{
+	}
+	else if (command == "VIEWGRADES") //bool get_student_grades
+	{
+	}
+	else 
+	{
+		send_reply(client_fd, "400 BAD REQUEST: command not available in MYCOURSES mode\n");
+	}
 }
 // Function to handle a single client connection in its own thread
 void handle_client(int client_fd, struct sockaddr_storage their_addr, ServerState& state) 
@@ -174,11 +276,7 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr, ServerStat
 	inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *)&their_addr), s, sizeof s);
 	std::cout << "server: got connection from " << s << std::endl;
 
-    // Implement the protocol interaction here.
-    // 2. Parse the client's commands (e.g., IAM, CATALOG, ENROLLMENT, BYE).
-    // 4. Send the appropriate reply codes (e.g., 200, 210, 403, 404, etc.) back to the client.
-    
-    	// 1. You must continuously recv() data from the client.  
+    // Implement the protocol interaction here.  
     	char buf[1024];
 	bool identified = false;
 	Mode mode = Mode::kNone;
@@ -199,9 +297,12 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr, ServerStat
 			std::string message(buf);
 			
 			std::istringstream iss(message);
+
 			std::string command, args;
 			iss >> command;
 			std::getline(iss, args);
+
+			std::transform(command.begin(), command.end(), command.begin(), [](unsigned char c) { return std::toupper(c); }); 
 
 			size_t start = args.find_first_not_of(' ');
 			args = (start == std::string::npos) ? "" : args.substr(start);
@@ -209,8 +310,8 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr, ServerStat
 			{
 				args.pop_back();
 			}
-
-			if (!identified) // 3. Ensure the proper mode sequencing (the client must send IAM first).
+			
+			if (!identified) 
 			{
 				if (command == "IAM")
 				{
@@ -222,22 +323,36 @@ void handle_client(int client_fd, struct sockaddr_storage their_addr, ServerStat
 					send(client_fd, reply.c_str(), reply.size(), 0);
 				}
 			}
-			else // 2. Parse the client's commands (e.g., IAM, CATALOG, ENROLLMENT, BYE).
+			else 
 			{
 				if (command == "BYE")
 				{
-					send_reply(client_fd, "200 SUCCESS\nSee ya!\n");
+					if (!args.empty())
+					{
+						send_reply(client_fd, "400 BAD REQUEST: BYE does not take multiple arguments\n");
+					}
+					else
+					{
+						send_reply(client_fd, "200 SUCCESS\nSee ya!\n");
+					}
 					break;
 				}
 				else if (command == "HELP")
 				{
-					send_help(client_fd, mode);
+					if (!args.empty())
+					{
+						send_reply(client_fd, "400 BAD REQUEST: BYE does not take multiple arguments\n");
+					}
+					else 
+					{
+						send_help(client_fd, mode);
+					}
 				}
-				else if (try_switch_mode(client_fd, command, mode))
+				else if (try_switch_mode(client_fd, command, args, mode))
 				{
 				}
-				else// 2. Parse the client's commands (e.g., IAM, CATALOG, ENROLLMENT, BYE).
- 				{
+				else
+				{
 					switch (mode)
 					{
 						case Mode::kNone:
@@ -373,6 +488,7 @@ int main(int argc, char *argv[]) {
     }
 
     std::cout << "server: waiting for connections on port " << port_to_use << "..." << std::endl;
+    std::vector<std::jthread> threads;
 
     while (true) {
         sin_size = sizeof their_addr;
@@ -385,7 +501,6 @@ int main(int argc, char *argv[]) {
 
         // Create a new thread to handle the accepted connection
         // std::jthread automatically joins upon destruction
-	std::vector<std::jthread> threads;
 	threads.push_back(std::jthread(handle_client, client_fd, their_addr, std::ref(state)));
     }
 

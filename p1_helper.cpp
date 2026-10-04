@@ -11,6 +11,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <iostream>
 
 /**
  * @brief Loads course data from the specified file into memory.
@@ -92,9 +93,35 @@ std::vector<Course> load_courses_from_db(const std::string& filename) {
  * @param search_term The term to search for.
  * @return A vector of matching Course structs.
  */
-std::vector<Course> search_courses(const std::vector<Course>& courses, const std::string& filter, const std::string& search_term) {
-    // TODO: Implement this function
-    return {};
+std::vector<Course> search_courses(const std::vector<Course>& courses, const std::string& filter, const std::string& search_term) 
+{
+	std::string filter_upper = filter;
+	std::string search_term_upper = search_term;
+	std::transform(filter_upper.begin(), filter_upper.end(), filter_upper.begin(), [](unsigned char c1) { return std::toupper(c1); });
+	std::transform(search_term_upper.begin(), search_term_upper.end(), search_term_upper.begin(), [](unsigned char c2) { return std::toupper(c2); });
+	
+	std::vector<Course> results;
+
+	for (const Course& c : courses)
+	{
+		std::string field;
+		
+		if (filter_upper == "COURSE-CODE") field = c.course_code;
+		
+		//else if (filter_upper == "TITLE") field = c.title;
+		
+		else if (filter_upper == "SUBJECT") field = c.subject;
+	
+		else if (filter_upper == "INSTRUCTOR") field = c.instructor;
+	
+		std::transform(field.begin(), field.end(), field.begin(), [](unsigned char ch) { return std::toupper(ch); });
+		
+		if (field.find(search_term_upper) != std::string::npos)
+		{
+			results.push_back(c);
+		}
+	}
+    return results;
 }
 
 /**
@@ -103,8 +130,21 @@ std::vector<Course> search_courses(const std::vector<Course>& courses, const std
  * @param course_code The unique identifier for the course.
  * @return The matching Course struct, or a default constructed Course if not found.
  */
-Course get_course_by_code(const std::vector<Course>& courses, const std::string& course_code) {
-    // TODO: Implement this function
+Course get_course_by_code(const std::vector<Course>& courses, const std::string& course_code) 
+{
+	std::string target = course_code;
+	std::transform(target.begin(), target.end(), target.begin(), [](unsigned char c) { return std::toupper(c); });
+
+	for (const Course& c : courses)
+	{
+		std::string stored = c.course_code;
+		std::transform(stored.begin(), stored.end(), stored.begin(), [](unsigned char ch) { return std::toupper(ch); });
+
+		if (stored == target)
+		{
+			return c;
+		}
+	}
     return {};
 }
 
