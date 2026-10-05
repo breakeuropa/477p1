@@ -181,10 +181,11 @@ void handle_catalog_command(int client_fd, const std::string& command, const std
 
 	if (command == "LIST") 
 	{
+		std::string filter;
 		iss >> filter;
-		if (filter.empty())
 		std::string filter_upper = filter;
 		std::transform(filter_upper.begin(), filter_upper.end(), filter_upper.begin(), [](unsigned char c) { return std::toupper(c); }); 
+		if (filter.empty())
 		{
 			std::string reply = "250 SUCCESS:\n";
 			for (const Course& c : state.courses)
@@ -337,7 +338,7 @@ void handle_enrollment_command(int client_fd, const std::string& command, const 
 			}
 			std::string grade = generate_random_grade();
 			state.student_records[username].push_back(GradeRecord{course_code, grade});
-			//send_reply(client_fd, "250 ENROLLMENT SUCCESSFUL\nGrade assigned: " + grade + "\n");
+			send_reply(client_fd, "250 ENROLLMENT SUCCESSFUL\nGrade assigned: " + grade + "\n");
 		}
 	}
 	else if (command == "DROP") //bool drop_course
@@ -374,9 +375,9 @@ void handle_enrollment_command(int client_fd, const std::string& command, const 
 					break;
 				}
 			}
-			if (!_is_enrolled)
+			if (!is_enrolled)
 			{
-				send_reply(client_fd, "404 FORBIDDEN: cannot drop course unless enrolled\n");
+				send_reply(client_fd, "404 NOT FOUND: cannot drop course unless enrolled\n");
 				return;
 			}
 			else if (drop_course(state.courses, course_code))
@@ -389,7 +390,7 @@ void handle_enrollment_command(int client_fd, const std::string& command, const 
 			
 					if (rec_code_upper == target_upper)
 					{
-						records.erase(records.begin() + 1);
+						records.erase(records.begin() + i);
 						break;
 					}
 				}
@@ -413,7 +414,7 @@ void handle_mycourses_command(int client_fd, const std::string& command, const s
 
 	if (command == "LIST")
 	{
-		std::lock_gaurd<std::mutex> lock(state.mutex);
+		std::lock_guard<std::mutex> lock(state.mutex);
 		if (state.student_records[username].empty())
 		{
 			send_reply(client_fd, "304 NO CONTENT\n");
@@ -430,7 +431,7 @@ void handle_mycourses_command(int client_fd, const std::string& command, const s
 	}
 	else if (command == "VIEWGRADES") //bool get_student_grades
 	{
-		std::lock_gaurd<std::mutex> lock(state.mutex);
+		std::lock_guard<std::mutex> lock(state.mutex);
 		if (state.student_records[username].empty())
 		{
 			send_reply(client_fd, "304 NO CONTENT\n");

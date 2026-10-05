@@ -154,9 +154,27 @@ Course get_course_by_code(const std::vector<Course>& courses, const std::string&
  * @param course_code The course to enroll in.
  * @return true if enrollment was successful, false otherwise.
  */
-bool enroll_in_course(std::vector<Course>& courses, const std::string& course_code) {
-    // TODO: Implement this function
-    return false;
+bool enroll_in_course(std::vector<Course>& courses, const std::string& course_code) 
+{
+	std::string target = course_code;
+	std::transform(target.begin(), target.end(), target.begin(), [](unsigned char ch) { return std::toupper(ch); });
+	
+	for (Course& c : courses)
+	{	
+		std::string stored = c.course_code;
+		std::transform(stored.begin(), stored.end(), stored.begin(), [](unsigned char ch) { return std::toupper(ch); });
+
+		if (stored == target)
+		{
+			if (c.seats_available >= 1)
+			{
+				c.seats_available--;
+				return true;
+			}
+			else return false;
+		}
+	}
+	return false;
 }
 
 /**
@@ -165,8 +183,22 @@ bool enroll_in_course(std::vector<Course>& courses, const std::string& course_co
  * @param course_code The course to drop.
  * @return true if drop was successful, false otherwise.
  */
-bool drop_course(std::vector<Course>& courses, const std::string& course_code) {
-    // TODO: Implement this function
+bool drop_course(std::vector<Course>& courses, const std::string& course_code) 
+{
+	std::string target = course_code;
+	std::transform(target.begin(), target.end(), target.begin(), [](unsigned char ch) { return std::toupper(ch); });
+	
+	for (Course& c : courses)
+	{	
+		std::string stored = c.course_code;
+		std::transform(stored.begin(), stored.end(), stored.begin(), [](unsigned char ch) { return std::toupper(ch); });
+
+		if (stored == target)
+		{
+			c.seats_available++;
+			return true;
+		}
+	}
     return false;
 }
 
@@ -176,9 +208,31 @@ bool drop_course(std::vector<Course>& courses, const std::string& course_code) {
  * @param course_to_enroll The course the student wants to enroll in.
  * @return true if all prerequisites are met, false otherwise.
  */
-bool check_prerequisites(const std::vector<Course>& enrolled_courses, const Course& course_to_enroll) {
-    // TODO: Implement this function
-    return false;
+bool check_prerequisites(const std::vector<Course>& enrolled_courses, const Course& course_to_enroll) 
+{
+	if (course_to_enroll.prerequisites.empty()) return true;
+
+	for (const std::string& prereq_code : course_to_enroll.prerequisites)
+    	{
+		    bool found = false;
+		    std::string prereq_code_upper = prereq_code;
+		    std::transform(prereq_code_upper.begin(), prereq_code_upper.end(), prereq_code_upper.begin(), [](unsigned char ch) { return std::toupper(ch); });
+		    for (const Course& ec : enrolled_courses)
+		    {
+			    std::string ec_code_upper = ec.course_code;
+			    std::transform(ec_code_upper.begin(), ec_code_upper.end(), ec_code_upper.begin(), [](unsigned char ch) { return std::toupper(ch); });
+			    if (ec_code_upper == prereq_code_upper)
+			    {
+				    found = true;
+				    break;
+			    }
+		    }
+		    if (!found)
+		    {
+			    return false;
+		    }
+	}
+    return true;
 }
 
 /**
