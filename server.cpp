@@ -27,6 +27,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <cctype>
+#include <random>
 
 // C headers for socket API
 #include <stdio.h>
@@ -60,6 +61,17 @@ void *get_in_addr(struct sockaddr *sa) {
 }
 
 enum class Mode {kNone, kCatalog, kEnrollment, kMyCourses};
+
+std::string generate_random_grade()
+{
+	static const std::vector<std::string> grades = {"A","B","C","D","F"};
+
+	static std::random_device rd;
+	static std::mt19937 gen(rd());
+	static std::uniform_int_distribution<size_t> dist(0, grades.size() - 1);
+
+	return grades[dist(gen)];
+}
 
 void send_reply(int client_fd, const std::string& reply)
 {
@@ -169,12 +181,56 @@ void handle_catalog_command(int client_fd, const std::string& command, const std
 
 	if (command == "LIST") 
 	{
-		std::string reply = "250 SUCCESS:\n";
-		for (const Course& c : state.courses)
+		iss >> filter;
+		if (filter.empty())
+		std::string filter_upper = filter;
+		std::transform(filter_upper.begin(), filter_upper.end(), filter_upper.begin(), [](unsigned char c) { return std::toupper(c); }); 
 		{
-			reply += c.course_code + ": " + c.title + " - " + c.subject + " - " + c.instructor + "\n";  
+			std::string reply = "250 SUCCESS:\n";
+			for (const Course& c : state.courses)
+			{
+				reply += c.course_code + ": " + c.title + " - " + c.subject + " - " + c.instructor + "\n";  
+			}
+			send_reply(client_fd, reply);
+		}	
+		else if (filter_upper == "SUBJECT")
+		{
+			std::string reply = "250 SUCCESS:\n";
+			for (const Course& c : state.courses)
+			{
+				reply += c.subject + "\n";  
+			}
+			send_reply(client_fd, reply);
 		}
-		send_reply(client_fd, reply);
+		else if (filter_upper == "INSTRUCTOR")
+		{
+			std::string reply = "250 SUCCESS:\n";
+			for (const Course& c : state.courses)
+			{
+				reply +=  c.instructor + "\n";  
+			}
+			send_reply(client_fd, reply);
+		}
+		else if (filter_upper == "COURSE-CODE")
+		{
+			std::string reply = "250 SUCCESS:\n";
+			for (const Course& c : state.courses)
+			{
+				reply += c.course_code + "\n";  
+			}
+			send_reply(client_fd, reply);
+		}
+		else if (!filter_upper.empty())
+		{
+			send_reply(client_fd, "400 BAD REQUEST: '" + filter + "' is not recognized. Try SUBJECT, INSTRUCTOR, or COURSE-CODE\n");
+			return;
+		}
+		else 
+		{
+			send_reply(client_fd, "304 NO CONTENT\n");
+			return;
+		}
+
 	}
 	else if (command == "SEARCH") //vectorCourse search_courses
 	{
@@ -200,6 +256,7 @@ void handle_catalog_command(int client_fd, const std::string& command, const std
 		else
 		{
 			send_reply(client_fd, "304 NO CONTENT: nothing matching filter or search term\n");
+			return;
 		}
 	}
 	else if (command == "SHOW") //Course get_course_by_code
@@ -215,6 +272,7 @@ void handle_catalog_command(int client_fd, const std::string& command, const std
 		if (c.course_code.empty())
 		{
 			send_reply(client_fd, "404 NOT FOUND: there are no matching courses\n");
+			return;
 		}
 		else if (availability_upper == "AVAILABILITY")
 		{
@@ -224,6 +282,7 @@ void handle_catalog_command(int client_fd, const std::string& command, const std
 		else if (!availability.empty())
 		{
 			send_reply(client_fd, "400 BAD REQUEST: '" + availability + "' is not a valid argument. Try 'availability'\n");
+			return;
 		}
 		else
 		{
@@ -233,6 +292,7 @@ void handle_catalog_command(int client_fd, const std::string& command, const std
 	else
 	{
 		send_reply(client_fd, "400 BAD REQUEST: command not avaialble in CATALOG mode\n");
+		return;
 	}
 
 }
@@ -243,9 +303,103 @@ void handle_enrollment_command(int client_fd, const std::string& command, const 
 
 	if (command == "ENROLL") //bool enroll_in_course
 	{
+		std::string course_code;
+		iss >> course_code;
+		if (course_code.empty())
+		{
+			send_reply(client_fd, "400 BAD REQUEST: <course-code> is a required argument\n");
+			return;
+		}
+		
+		std::lock_guard<std::mutex> lock(state.mutex);
+		Course c = get_course_by_code(state.courses, course_code);
+
+		if (c.course_code.empty())
+		{
+			send_reply(client_fd, "404 NOT FOUND: there are no matching courses\n");
+		}
+		else
+		{
+			std::vector<Course> enrolled_courses;
+			for (const GradeRecord& gr : state.student_records[username])
+			{
+				enrolled_courses.push_back(get_course_by_code(state.courses, gr.course_code));
+			}
+			if (!check_prerequisites(enrolled_courses, c))
+			{
+				send_reply(client_fd, "403 FORBIDDEN: prereqs not met\n");
+				return;
+			}
+			if (!enroll_in_course(state.courses, course_code))
+			{
+				send_reply(client_fd, "403 FORBIDDEN: course is full\n");
+				return;
+			}
+			std::string grade = generate_random_grade();
+			state.student_records[username].push_back(GradeRecord{course_code, grade});
+			//send_reply(client_fd, "250 ENROLLMENT SUCCESSFUL\nGrade assigned: " + grade + "\n");
+		}
 	}
 	else if (command == "DROP") //bool drop_course
 	{
+		std::string course_code;
+		iss >> course_code;
+		if (course_code.empty())
+		{
+			send_reply(client_fd, "400 BAD REQUEST: <course-code> is a required argument\n");
+			return;
+		}
+		
+		std::lock_guard<std::mutex> lock(state.mutex);
+		Course c = get_course_by_code(state.courses, course_code);
+
+		if (c.course_code.empty())
+		{
+			send_reply(client_fd, "404 NOT FOUND: there are no matching courses\n");
+			return;
+		}
+		else
+		{
+			std::string target_upper = course_code;
+			std::transform(target_upper.begin(), target_upper.end(), target_upper.begin(), [](unsigned char ch) { return std::toupper(ch); });
+
+			bool is_enrolled = false;
+			for (const GradeRecord& gr : state.student_records[username])
+			{
+				std::string gr_code_upper = gr.course_code;
+				std::transform(gr_code_upper.begin(), gr_code_upper.end(), gr_code_upper.begin(), [](unsigned char ch) { return std::toupper(ch); });
+				if (gr_code_upper == target_upper)
+				{
+					is_enrolled = true;
+					break;
+				}
+			}
+			if (!_is_enrolled)
+			{
+				send_reply(client_fd, "404 FORBIDDEN: cannot drop course unless enrolled\n");
+				return;
+			}
+			else if (drop_course(state.courses, course_code))
+			{
+				auto& records = state.student_records[username];
+				for (size_t i = 0; i < records.size(); i++)
+				{
+					std::string rec_code_upper = records[i].course_code;
+					std::transform(rec_code_upper.begin(), rec_code_upper.end(), rec_code_upper.begin(), [](unsigned char ch) { return std::toupper(ch); });
+			
+					if (rec_code_upper == target_upper)
+					{
+						records.erase(records.begin() + 1);
+						break;
+					}
+				}
+				send_reply(client_fd, "250 SUCCESS: " + course_code + " dropped\n");
+			}
+			else
+			{
+				send_reply(client_fd, "500 SERVER ERROR\n");
+			}
+		}
 	}
 	else
 	{
@@ -259,9 +413,37 @@ void handle_mycourses_command(int client_fd, const std::string& command, const s
 
 	if (command == "LIST")
 	{
+		std::lock_gaurd<std::mutex> lock(state.mutex);
+		if (state.student_records[username].empty())
+		{
+			send_reply(client_fd, "304 NO CONTENT\n");
+		}
+		else
+		{
+			std::string reply = "250 Enrollment History:\n";
+			for (const GradeRecord& gr : state.student_records[username])
+			{
+				reply += " " + gr.course_code + "\n";
+			}
+			send_reply(client_fd, reply);
+		}
 	}
 	else if (command == "VIEWGRADES") //bool get_student_grades
 	{
+		std::lock_gaurd<std::mutex> lock(state.mutex);
+		if (state.student_records[username].empty())
+		{
+			send_reply(client_fd, "304 NO CONTENT\n");
+		}
+		else
+		{
+			std::string reply = "250 SUCCESS: Grades:\n";
+			for (const GradeRecord& gr : state.student_records[username])
+			{
+				reply += " " + gr.course_code + ": " + gr.grade + "\n";
+			}
+			send_reply(client_fd, reply);
+		}
 	}
 	else 
 	{
