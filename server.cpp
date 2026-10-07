@@ -73,6 +73,39 @@ std::string generate_random_grade()
 	return grades[dist(gen)];
 }
 
+std::vector<Course> remove_duplicate_courses(const std::vector<Course>& courses)
+{
+	std::vector<Course> unique_courses;
+	std::vector<std::string> seen_codes;
+
+	for (const Course& c : courses)
+	{
+		std::string code_upper = c.course_code;
+		std::transform(code_upper.begin(), code_upper.end(), code_upper.begin(), [](unsigned char ch) { return std::toupper(ch); });
+		
+		bool alr_seen = false;
+		for (const std::string& seen : seen_codes)
+		{
+			if (seen == code_upper)
+			{
+				alr_seen = true;
+				break;
+			}
+		}
+
+		if (!alr_seen)
+		{
+			seen_codes.push_back(code_upper);
+			unique_courses.push_back(c);
+		}
+		else
+		{
+			std::cout << "Duplicate course code: " << c.course_code << ". Skipped\n";
+		}
+	}
+	return unique_courses;
+}
+
 void send_reply(int client_fd, const std::string& reply)
 {
 	send(client_fd, reply.c_str(), reply.size(), 0);
@@ -98,32 +131,32 @@ void send_help(int client_fd, Mode mode)
 	{
 		case Mode::kNone:
 			send_reply(client_fd, 
-					"200 SUCCESS\n Avaiable commands are:\n"
-					"CATALOG: access course catalog\n"
-					"ENROLLMENT: enroll or drop course\n"
-					"MYCOURSES: manage schedules\n"
-					"BYE: close and exit\n");
+					"\n200 SUCCESS\n Avaiable commands are:\n"
+					"\tCATALOG: access course catalog\n"
+					"\tENROLLMENT: enroll or drop course\n"
+					"\tMYCOURSES: manage schedules\n"
+					"\tBYE: close and exit\n");
 			break;
 		case Mode::kCatalog:
 			send_reply(client_fd,
-					"200 SUCCESS\n CATALOG commands are:\n"
-					"LIST [subject, instructor, course-code]: shows all available courses\n"
-					"SEARCH <filter> <search-term>: finds courses within the filter and search-term\n"
-					"SHOW <course-code> [availability]: displays details for course\n"
+					"\n200 SUCCESS\n CATALOG commands are:\n"
+					"\tLIST [subject|instructor|course-code]: shows all available courses\n"
+					"\tSEARCH <subject|instructor|course-code> <search-term>: finds courses within the filter and search-term\n"
+					"\tSHOW <course-code> [availability]: displays details for course\n"
 					"\n(aruguments within <> are required, [] are optional)\n");
 			break;
 		case Mode::kEnrollment:
 			send_reply(client_fd,
-					"200 SUCCESS\n ENROLLMENT commands are:\n"
-					"ENROLL <course_code>: enrolls you in a course\n"
-					"DROP <course_code>: drops a specified course\n"
-					"\n(arguemnts in <> are required)\n");
+					"\n200 SUCCESS\n ENROLLMENT commands are:\n"
+					"\tENROLL <course-code>: enrolls you in a course\n"
+					"\tDROP <course-code>: drops a specified course\n"
+					"\n(arguments in <> are required)\n");
 			break;
 		case Mode::kMyCourses:
 			send_reply(client_fd, 
-					"200 SUCCESS\n MYCOURSES commands are:\n"
-					"LIST: displays current enrollment\n"
-					"VIEWGRADES: displays grades for completed courses\n");
+					"\n200 SUCCESS\n MYCOURSES commands are:\n"
+					"\tLIST: displays current enrollment\n"
+					"\tVIEWGRADES: displays grades for completed courses\n");
 			break;
 	}
 }
@@ -321,6 +354,26 @@ void handle_enrollment_command(int client_fd, const std::string& command, const 
 		}
 		else
 		{
+			std::string target_upper = course_code;
+			std::transform(target_upper.begin(), target_upper.end(), target_upper.begin(), [](unsigned char ch) { return std::toupper(ch); });
+
+			bool alr_enrolled = false;
+			for (const GradeRecord& gr : state.student_records[username])
+			{
+				std::string gr_code_upper = gr.course_code;
+				std::transform(gr_code_upper.begin(), gr_code_upper.end(), gr_code_upper.begin(), [](unsigned char ch) { return std::toupper(ch); });
+				if (gr_code_upper == target_upper)
+				{
+					alr_enrolled = true;
+					break;
+				}
+			}
+			if (alr_enrolled)
+			{
+				send_reply(client_fd, "403 FORBIDDEN: already enrolled in course\n");
+				return;
+			}
+
 			std::vector<Course> enrolled_courses;
 			for (const GradeRecord& gr : state.student_records[username])
 			{
@@ -394,7 +447,42 @@ void handle_enrollment_command(int client_fd, const std::string& command, const 
 						break;
 					}
 				}
-				send_reply(client_fd, "250 SUCCESS: " + course_code + " dropped\n");
+				
+				std::string reply = "250 SUCCESS: " + course_code + " dropped\n";
+				std::vector<std::string> just_dropped = {course_code};
+
+				bool dropped_course;
+				do 
+				{
+					dropped_course = false;
+					for (size_t i = 0; i < records.size(); i++)
+					{
+						Course enrolled_course = get_course_by_code(state.courses, records[i].course_code);
+						for (const std::string& required : enrolled_course.prerequisites)
+						{
+							std::string required_upper = required;
+							std::transform(required_upper.begin(), required_upper.end(), required_upper.begin(),[](unsigned char ch) { return std::toupper(ch); });
+							bool was_dropped = false;
+							for (const std::string& d : just_dropped)
+							{
+								std::string d_upper = d;
+								std::transform(d_upper.begin(), d_upper.end(), d_upper.begin(),[](unsigned char ch) { return std::toupper(ch); });
+								if (d_upper == required_upper) { was_dropped = true; break; }
+							}
+							if (was_dropped)
+							{
+								drop_course(state.courses, records[i].course_code);
+								reply += "250: prereqs no longer satisfied: " + records[i].course_code + "\n";
+								just_dropped.push_back(records[i].course_code);
+								records.erase(records.begin() + i);
+								dropped_course = true;
+								break;
+							}
+						}
+						if (dropped_course) break;
+					}
+				} while (dropped_course);
+				send_reply(client_fd, reply);
 			}
 			else
 			{
@@ -626,7 +714,7 @@ int main(int argc, char *argv[]) {
     // 	Call your helper function to load the courses database here.
     // 	e.g., load_courses_from_db(db_file_to_use);
     // 	Do this BEFORE setting up the sockets and entering the main loop.
-    state.courses = load_courses_from_db(db_file_to_use);
+    state.courses = remove_duplicate_courses(load_courses_from_db(db_file_to_use));
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;       // IPv4
